@@ -15,7 +15,8 @@ NestJS backend for a chess web app. Handles bot play (Stockfish + Maia), real-ti
   Leela weights that requires the `lc0` binary and has no npm equivalent, so
   there is deliberately no engine dependency in `package.json`. Binary paths come
   from env vars — see **Deployment**.
-- `chess.js` for move validation, FEN/PGN, and check/mate detection
+- `chess.js` for move validation, FEN/PGN, and check/mate detection — in use by
+  the game module (see **Game module** below)
 - `class-validator` + `class-transformer` for `ValidationPipe` on DTOs. Use these
   on WebSocket move payloads especially — that is untrusted client input.
 - `@nestjs/config` for env loading
@@ -61,7 +62,42 @@ so this is aligned with the framework rather than a workaround.
 - `PrismaModule` is deliberately **not** `@Global()` — feature modules import it
   explicitly so their DB dependency stays visible in their own metadata.
 - **Current state: no models are defined and no migrations have been run.**
-  `prisma/schema.prisma` contains only the generator and datasource blocks.
+  `prisma/schema.prisma` contains only the generator and datasource blocks. This
+  is deliberate, not an oversight — the game module below is in-memory by design.
+
+## Game module
+
+`src/game/` is the first feature slice: a single hotseat game, two players
+alternating on one board. **No WebSockets, no engines, no auth, no persistence.**
+
+- **No player identity.** The server validates only that a move is legal for the
+  side to move — anyone holding the game id can move for either side. Identity
+  arrives with real multiplayer.
+- **Games live in a `Map` in `GamesStore` and vanish on restart.** There is no
+  Prisma model for games and none should be added until persistence is actually
+  wanted.
+
+Routes live under `/games` in `game.controller.ts` — create, read, move, list
+legal moves, resign, agree draw. **The endpoints are not enumerated here on
+purpose; an OpenAPI spec is coming and this section will link to it instead.**
+
+Structure to preserve as this grows:
+
+- **`GameService` owns the rules; `GamesStore` owns storage and knows no chess.**
+  When persistence lands, the store is replaced and the service is untouched.
+- **`chess.js` cannot represent a resignation or an agreed draw** — those live
+  outside the position. They are stored on `record.outcome` and always take
+  precedence over the board. Every other ending is derived by `deriveOutcome()`
+  in `game-outcome.ts`, kept a pure function so stalemate / fifty-move /
+  insufficient-material / threefold are testable straight from a FEN instead of
+  having to be reached through the API.
+- `record.finishedAt` is stamped by the service so the store can expire finished
+  games on a short TTL (10 min) versus 24 h for in-progress ones, without the
+  store needing to know any chess.
+- **`GameService` is deliberately not exported from `GameModule`.** Add `exports`
+  when the WebSocket gateway actually needs it.
+- Ports: the backend keeps Nest's default `3000` and the Next.js frontend runs on
+  `3001`, so `CORS_ORIGIN` defaults to `http://localhost:3001`.
 
 ## Commands
 
@@ -82,8 +118,16 @@ so this is aligned with the framework rather than a workaround.
 - DO NOT remove `unplugin-swc` from `vitest.config.ts`. Vitest transforms with
   esbuild, which cannot emit `emitDecoratorMetadata`; without SWC every
   `Test.createTestingModule` fails to resolve providers.
-- Unit specs live next to the code (`src/**/*.spec.ts`). E2E specs live in
-  `test/` and run under the separate `vitest.config.e2e.ts`.
+- **Unit specs live in a `tests/` subfolder inside the feature folder** —
+  `src/game/tests/game.service.spec.ts`, not `src/game/game.service.spec.ts`.
+  The vitest `include` is `src/**/*.spec.ts`, so the subfolder needs no config
+  change. (`src/app.controller.spec.ts` is a leftover from the scaffold and is
+  deliberately left colocated; don't create a `src/tests/` for it alone.)
+- E2E specs live in `test/` and run under the separate `vitest.config.e2e.ts`.
+- **E2E specs must call `setupApp(app)`** from `src/app.setup.ts` after
+  `createNestApplication()`. `createNestApplication()` applies none of `main.ts`'s
+  configuration, so without it the test app has no `ValidationPipe` and every
+  expected `400` silently passes as a `201`/`200`.
 - **Do not import from `supertest/types`** — it does not resolve under ESM (`App`
   exists only in `@types/supertest`, is not re-exported from the package root,
   and the runtime package ships no `types` module). Use a bare
@@ -119,11 +163,48 @@ so this is aligned with the framework rather than a workaround.
   `source-map-support` remain as devDependencies from the original Jest/webpack
   scaffold and appear to be unused now. Worth confirming before removing.
 
+## Coding style
+
+**Named constants: a `as const` object plus a derived union type — not `enum`.**
+Keys in `CONSTANT_CASE`, declaration-merged with a type of the same name so one
+import gives you both the values and the type:
+
+```ts
+export const GameStatus = { IN_PROGRESS: 'in_progress', CHECKMATE: 'checkmate' } as const;
+export type GameStatus = (typeof GameStatus)[keyof typeof GameStatus];
+```
+
+Enums are nominally typed, so `chess.js`'s structural unions (`Color`, `Square`) and validated DTO fields would need a cast at every boundary — and enums are not type-erasable.
+
+**Comments: one line, and use the full 180-char print width rather than wrapping
+across several lines.** Write one only where the reasoning is not recoverable
+from the code — a library quirk, an ordering constraint, a deliberate trade-off.
+If a comment restates what the code already says, delete it. Default to none.
+
+**Types in decorated signatures must use `import type`.** Under
+`isolatedModules` + `emitDecoratorMetadata`, a type used as a controller return
+type or parameter is a TS1272 error when imported as a value. In practice:
+
+- Response shapes are plain `type` aliases, imported with `import type`.
+- Request DTOs are classes imported as values — `ValidationPipe` needs them at
+  runtime for its metadata.
+
+**Validate against a library's own exported constants, never a hand-rolled list
+or regex** — `@IsIn(SQUARES)`, `@IsIn(Object.values(PromotionPiece))`.
+
+**HTTP error mapping**, kept consistent as features are added:
+
+- `404` — unknown resource
+- `400` — malformed input, or well-formed but illegal for the current state
+- `409` — an action attempted against terminal state (e.g. moving in a finished
+  game)
+
 ## Git / commits
 
+- Use conventional branch naming (`feat/`, `fix/`, etc)
 - Use Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, etc.)
 - Do NOT commit automatically. Leave staging and committing to me — just
-  make the code changes and let me review the diff before committing.
+  make the code changes and let me review the diff before committing. Write a short summary and a summary for each commit.
 
 ## Decision-making
 
