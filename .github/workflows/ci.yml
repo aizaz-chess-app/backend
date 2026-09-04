@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Superseded PR runs are wasted work, but every push to dev/main should complete.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # prisma7.config.ts reads DATABASE_URL for the datasource; `prisma generate` never connects, but the value must be present.
+  DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+jobs:
+  checks:
+    name: Lint, typecheck & OpenAPI spec
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - run: pnpm lint:check
+      - run: pnpm format:check
+      - run: pnpm typecheck
+
+      # Runs `nest build` first, so this covers the production build as well as the committed spec.
+      - run: pnpm openapi:check
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - run: pnpm test
+
+  e2e:
+    name: E2E tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+
+      - run: pnpm test:e2e
