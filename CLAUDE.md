@@ -12,6 +12,7 @@ NestJS backend for a chess web app. Handles bot play (Stockfish + Maia), real-ti
 - `chess.js` for move validation, FEN/PGN, and check/mate detection
 - `class-validator` + `class-transformer` for `ValidationPipe` on DTOs — use these on WebSocket move payloads especially, that is untrusted client input
 - `@nestjs/config` for env loading
+- `@nestjs/swagger` for the generated OpenAPI spec — see **API documentation** below
 - pnpm (version pinned via Corepack — see `packageManager` in package.json)
 - ESLint (v10, flat config) + Prettier. Prettier runs *through* ESLint via `eslint-plugin-prettier`, so formatting violations surface as `prettier/prettier` errors and are autofixed by `pnpm lint`.
 - **Chess engines run as native UCI binaries, not npm packages.** Stockfish and
@@ -79,14 +80,20 @@ runtime. **Source files stay `.ts` — never hand-author a `.js`.**
 
 ## Commands
 
-- `pnpm dev` — start dev server (alias of `start:dev`); `pnpm start`,
-  `pnpm start:debug`, `pnpm start:prod`
-- `pnpm build` — `nest build`
-- `pnpm test` / `test:watch` / `test:cov` / `test:debug` — Vitest
-- `pnpm test:e2e` — Vitest against `vitest.config.e2e.ts`
-- `pnpm lint` — ESLint (autofixes); `pnpm lint:check` for CI
-- `pnpm format` — Prettier; `pnpm format:check` for CI
-- `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:studio` — Prisma
+Commands are in package.json. Always run `pnpm lint` and `pnpm test`
+before reporting a task complete. Never run watch-mode scripts.
+
+## API documentation
+
+`openapi.yaml` at the repo root is **generated** from `@nestjs/swagger` decorators
+and consumed by the frontend. Never hand-edit it.
+
+- **Every endpoint must be written with the spec in mind**: routes get `@ApiOperation`
+  and a response decorator per status, DTO fields get `@ApiProperty`. Then run
+  `pnpm openapi:generate` and commit the result in the same PR.
+- `pnpm openapi:check` fails when the committed spec is stale.
+- Swagger UI is served at `/api-docs` in every environment. The builder lives in
+  `src/openapi/`.
 
 ## Testing
 
@@ -126,13 +133,19 @@ runtime. **Source files stay `.ts` — never hand-author a `.js`.**
   `"type": "module"` and changed `license` from `UNLICENSED` to `ISC`. Re-check
   both after running it. Pass `--no-skills` to skip the agent-skill install.
 - **pnpm blocks dependency build scripts by default** (`ERR_PNPM_IGNORED_BUILDS`).
-  Approved packages are listed under `allowBuilds` in `pnpm-workspace.yaml`. A
-  blocked Prisma build silently skips the engine download.
+  Packages are listed under `allowBuilds` in `pnpm-workspace.yaml`, `true` to build
+  or `false` to never build. A blocked Prisma build silently skips the engine
+  download. Adding a dependency can append an unresolved `set this to true or false`
+  placeholder, which fails **every** pnpm command — including `pnpm build`, whose
+  dep-status check shells out to `install` — until you replace it with a boolean.
 - **Agent skills:** `.agents/skills/` holds the only real files; `.claude/skills/*`
   are symlinks into it. Deleting `.agents/` leaves dangling symlinks and removes
   the skills.
 
 ## Coding style
+
+**`src/common/` holds only what is reusable across modules** — generic shapes like
+`ErrorResponseDto`. Anything specific to one endpoint belongs in its feature folder.
 
 **Named constants: an `as const` object plus a derived union type — not `enum`.**
 Keys in `CONSTANT_CASE`, declaration-merged with a type of the same name so one
@@ -150,15 +163,14 @@ across several.** Write one only where the reasoning is not recoverable from the
 code — a library quirk, an ordering constraint, a deliberate trade-off. If a
 comment restates the code, delete it. Default to none.
 
-**Types in decorated signatures must use `import type`.** Under `isolatedModules`
-
-- `emitDecoratorMetadata`, a type used as a controller return type or parameter is
-a TS1272 error when imported as a value. So: response shapes are plain `type`
-aliases imported with `import type`; request DTOs are classes imported as values,
-since `ValidationPipe` needs them at runtime for its metadata.
+**Request and response DTOs are both classes imported as values** — `ValidationPipe`
+and `@ApiOkResponse({ type: X })` each need the class at runtime. Anything that is
+genuinely only a type still needs `import type`: under `isolatedModules` +
+`emitDecoratorMetadata` a value-imported type in a decorated signature is TS1272.
 
 **Validate against a library's own exported constants, never a hand-rolled list
-or regex** — `@IsIn(SQUARES)`, `@IsIn(Object.values(PromotionPiece))`.
+or regex** — `@IsIn(SQUARES)`, `@IsIn(Object.values(PromotionPiece))`. Enum-valued
+`@ApiProperty`s pass `enumName`, so the schema is one shared component.
 
 **HTTP error mapping:**
 
