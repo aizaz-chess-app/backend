@@ -80,8 +80,8 @@ runtime. **Source files stay `.ts` — never hand-author a `.js`.**
 
 ## Commands
 
-Commands are in package.json. Always run `pnpm lint` and `pnpm test`
-before reporting a task complete. Never run watch-mode scripts.
+Commands are in package.json. Always run `pnpm lint`, `pnpm typecheck` and
+`pnpm test` before reporting a task complete. Never run watch-mode scripts.
 
 ## API documentation
 
@@ -180,6 +180,8 @@ or regex** — `@IsIn(SQUARES)`, `@IsIn(Object.values(PromotionPiece))`. Enum-va
 
 ## Git / commits
 
+- **`main` is production, `dev` is integration.** Branch off `dev` and PR into
+  `dev`; a release is a `dev` → `main` PR. Never PR a feature branch into `main`.
 - Use conventional branch naming (`feat/`, `fix/`, etc) and Conventional Commits
   (`feat:`, `fix:`, `refactor:`, `test:`, etc.)
 - **Separate commits by Conventional Commit type.** Never mix types in one commit;
@@ -193,8 +195,9 @@ or regex** — `@IsIn(SQUARES)`, `@IsIn(Object.values(PromotionPiece))`. Enum-va
 ## Pull requests
 
 - **Assign every PR to me** (`aizazh1`) on creation — `gh pr create --assignee @me`.
-- **PRs are squash-merged into `main`.** Keep a branch to one coherent slice, so
+- **PRs are squash-merged into `dev`.** Keep a branch to one coherent slice, so
   the squashed commit reads as a single meaningful change.
+- Both branches are protected: CI must pass before a PR can merge.
 - **Do NOT merge automatically.** Opening the PR is where your work stops unless
   I ask otherwise.
 
