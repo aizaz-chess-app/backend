@@ -182,6 +182,9 @@ or regex** — `@IsIn(SQUARES)`, `@IsIn(Object.values(PromotionPiece))`. Enum-va
 
 - Use conventional branch naming (`feat/`, `fix/`, etc) and Conventional Commits
   (`feat:`, `fix:`, `refactor:`, `test:`, etc.)
+- **Separate commits by Conventional Commit type.** Never mix types in one commit;
+  split the work so each type gets its own, ordered so every commit stands on its
+  own. Ask when a change does not obviously belong to a single type.
 - **Do NOT commit automatically.** Leave staging and committing to me — make the
   code changes and let me review the diff.
 - Keep commit messages short — a couple of paragraphs at most. The diff carries
