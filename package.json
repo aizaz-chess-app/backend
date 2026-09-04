@@ -23,6 +23,8 @@
     "lint:check": "eslint \"{src,test}/**/*.ts\"",
     "format:check": "prettier --check \"{src,test}/**/*.ts\"",
     "dev": "nest start --watch",
+    "openapi:generate": "nest build && node dist/openapi/generate.js",
+    "openapi:check": "nest build && node dist/openapi/generate.js --check",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
@@ -34,6 +36,7 @@
     "@nestjs/core": "^12.0.1",
     "@nestjs/platform-express": "^12.0.1",
     "@nestjs/platform-socket.io": "^12.0.1",
+    "@nestjs/swagger": "^12.0.1",
     "@nestjs/websockets": "^12.0.1",
     "@prisma/client": "7.10.0",
     "chess.js": "^1.4.0",
@@ -68,7 +71,8 @@
     "typescript": "^6.0.2",
     "typescript-eslint": "^8.69.0",
     "unplugin-swc": "^1.5.11",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "yaml": "^2.9.0"
   },
   "packageManager": "pnpm@11.25.0+sha512.5cde925b4f075f725eb71fbae18a42ffe784524789f19b61c731cb8721ec28aaee160e01a8d5af4fedb2a42cdbf300efe23db356b0d4a17b4d63e11f8ab7c956"
 }

@@ -1,4 +1,4 @@
-import { BISHOP, BLACK, Chess, KNIGHT, QUEEN, ROOK, WHITE, type Color } from 'chess.js';
+import { BISHOP, BLACK, Chess, KING, KNIGHT, PAWN, QUEEN, ROOK, WHITE, type Color, type PieceSymbol } from 'chess.js';
 
 export const GameStatus = {
   IN_PROGRESS: 'in_progress',
@@ -30,6 +30,9 @@ export type PlayerColor = Color;
 
 export const PromotionPiece = { QUEEN, ROOK, BISHOP, KNIGHT } as const;
 export type PromotionPiece = (typeof PromotionPiece)[keyof typeof PromotionPiece];
+
+export const PieceType = { PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING } as const;
+export type PieceType = PieceSymbol;
 
 export type GameOutcome = {
   status: GameStatus;

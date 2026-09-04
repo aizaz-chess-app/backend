@@ -1,0 +1,560 @@
+openapi: 3.0.0
+paths:
+  /health:
+    get:
+      description: Returns 200 whenever the process is serving requests.
+      operationId: getHealth
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponseDto"
+      summary: Liveness probe
+      tags:
+        - health
+  /games:
+    post:
+      description: Creates a hotseat game at the standard starting position.
+      operationId: createGame
+      parameters: []
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameStateDto"
+      summary: Start a game
+      tags: &a1
+        - games
+  /games/{id}:
+    get:
+      operationId: getGame
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Game id returned by POST /games.
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameStateDto"
+        "404":
+          description: No game found with this id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundErrorResponseDto"
+      summary: Read the current game state
+      tags: *a1
+  /games/{id}/moves:
+    post:
+      description: Plays a move for the side to move. There is no player identity, so
+        either side can be moved.
+      operationId: makeMove
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Game id returned by POST /games.
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MakeMoveDto"
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameStateDto"
+        "400":
+          description: Malformed payload (`message` is an array), or a well-formed but
+            illegal move for the position (`message` is a string).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponseDto"
+        "404":
+          description: No game found with this id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundErrorResponseDto"
+        "409":
+          description: The game has already ended, so it can no longer be played.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+      summary: Play a move
+      tags: *a1
+    get:
+      description: An empty or opponent-occupied square yields an empty list rather
+        than an error.
+      operationId: getLegalMoves
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Game id returned by POST /games.
+          schema:
+            format: uuid
+            type: string
+        - name: square
+          required: false
+          in: query
+          description: Return only the moves available to the piece on this square. Omit
+            for every legal move.
+          schema:
+            $ref: "#/components/schemas/Square"
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LegalMovesDto"
+        "400":
+          description: The `square` query parameter is not a square.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponseDto"
+        "404":
+          description: No game found with this id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundErrorResponseDto"
+      summary: List legal moves
+      tags: *a1
+  /games/{id}/resign:
+    post:
+      description: Ends the game; the side that did not resign wins.
+      operationId: resign
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Game id returned by POST /games.
+          schema:
+            format: uuid
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResignDto"
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameStateDto"
+        "400":
+          description: "`color` is not `w` or `b`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponseDto"
+        "404":
+          description: No game found with this id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundErrorResponseDto"
+        "409":
+          description: The game has already ended, so it can no longer be played.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+      summary: Resign
+      tags: *a1
+  /games/{id}/draw:
+    post:
+      description: Both players are on one client, so this takes no body.
+      operationId: agreeDraw
+      parameters:
+        - name: id
+          required: true
+          in: path
+          description: Game id returned by POST /games.
+          schema:
+            format: uuid
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameStateDto"
+        "404":
+          description: No game found with this id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundErrorResponseDto"
+        "409":
+          description: The game has already ended, so it can no longer be played.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponseDto"
+      summary: Agree a draw
+      tags: *a1
+info:
+  title: Chess App API
+  description: HTTP API for the chess app backend.
+  version: 0.0.1
+  contact: {}
+tags: []
+servers:
+  - url: /
+    description: Same origin as these docs
+  - url: http://localhost:3000
+    description: Local development
+components:
+  schemas:
+    HealthResponseDto:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+      required:
+        - status
+    PlayerColor:
+      type: string
+      enum:
+        - w
+        - b
+      description: The side to move.
+    GameStatus:
+      type: string
+      enum:
+        - in_progress
+        - checkmate
+        - stalemate
+        - draw
+        - resigned
+    GameResult:
+      type: string
+      enum:
+        - 1-0
+        - 0-1
+        - 1/2-1/2
+      description: Null while the game is in progress.
+    DrawReason:
+      type: string
+      enum:
+        - threefold_repetition
+        - insufficient_material
+        - fifty_move_rule
+        - agreement
+      description: Null unless the game ended in a draw.
+    Square:
+      type: string
+      enum:
+        - a8
+        - b8
+        - c8
+        - d8
+        - e8
+        - f8
+        - g8
+        - h8
+        - a7
+        - b7
+        - c7
+        - d7
+        - e7
+        - f7
+        - g7
+        - h7
+        - a6
+        - b6
+        - c6
+        - d6
+        - e6
+        - f6
+        - g6
+        - h6
+        - a5
+        - b5
+        - c5
+        - d5
+        - e5
+        - f5
+        - g5
+        - h5
+        - a4
+        - b4
+        - c4
+        - d4
+        - e4
+        - f4
+        - g4
+        - h4
+        - a3
+        - b3
+        - c3
+        - d3
+        - e3
+        - f3
+        - g3
+        - h3
+        - a2
+        - b2
+        - c2
+        - d2
+        - e2
+        - f2
+        - g2
+        - h2
+        - a1
+        - b1
+        - c1
+        - d1
+        - e1
+        - f1
+        - g1
+        - h1
+    PieceType:
+      type: string
+      enum:
+        - p
+        - n
+        - b
+        - r
+        - q
+        - k
+      description: The piece that moved.
+    PromotionPiece:
+      type: string
+      enum:
+        - q
+        - r
+        - b
+        - n
+      description: The piece a pawn promoted to. Absent when the move was not a promotion.
+    MoveDto:
+      type: object
+      properties:
+        san:
+          type: string
+          description: Standard algebraic notation.
+          example: e4
+        lan:
+          type: string
+          description: Long algebraic notation.
+          example: e2e4
+        from:
+          example: e2
+          allOf:
+            - $ref: "#/components/schemas/Square"
+        to:
+          example: e4
+          allOf:
+            - $ref: "#/components/schemas/Square"
+        piece:
+          description: The piece that moved.
+          allOf:
+            - $ref: "#/components/schemas/PieceType"
+        color:
+          description: The side that moved.
+          allOf:
+            - $ref: "#/components/schemas/PlayerColor"
+        captured:
+          description: The captured piece. Absent when the move captured nothing.
+          allOf:
+            - $ref: "#/components/schemas/PieceType"
+        promotion:
+          description: The piece a pawn promoted to. Absent when the move was not a
+            promotion.
+          allOf:
+            - $ref: "#/components/schemas/PromotionPiece"
+      required:
+        - san
+        - lan
+        - from
+        - to
+        - piece
+        - color
+    GameStateDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Anyone holding this id can move for either side.
+        fen:
+          type: string
+          description: Forsyth-Edwards Notation for the current position.
+          example: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1
+        pgn:
+          type: string
+          description: Portable Game Notation for the moves played so far.
+          example: 1. e4 e5
+        turn:
+          description: The side to move.
+          allOf:
+            - $ref: "#/components/schemas/PlayerColor"
+        moveNumber:
+          type: number
+          description: Full move number, incremented after black moves.
+          example: 1
+        inCheck:
+          type: boolean
+          description: Whether the side to move is in check.
+        status:
+          allOf:
+            - $ref: "#/components/schemas/GameStatus"
+        result:
+          nullable: true
+          description: Null while the game is in progress.
+          allOf:
+            - $ref: "#/components/schemas/GameResult"
+        drawReason:
+          nullable: true
+          description: Null unless the game ended in a draw.
+          allOf:
+            - $ref: "#/components/schemas/DrawReason"
+        history:
+          description: Every move played, oldest first.
+          type: array
+          items:
+            $ref: "#/components/schemas/MoveDto"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - fen
+        - pgn
+        - turn
+        - moveNumber
+        - inCheck
+        - status
+        - result
+        - drawReason
+        - history
+        - createdAt
+        - updatedAt
+    NotFoundErrorResponseDto:
+      type: object
+      properties:
+        statusCode:
+          type: number
+          description: Repeats the HTTP status code.
+          example: 404
+        message:
+          type: string
+          description: Human-readable explanation of the failure.
+        error:
+          type: string
+          description: The HTTP status reason phrase.
+          example: Not Found
+      required:
+        - statusCode
+        - message
+        - error
+    MakeMoveDto:
+      type: object
+      properties:
+        from:
+          example: e2
+          allOf:
+            - $ref: "#/components/schemas/Square"
+        to:
+          example: e4
+          allOf:
+            - $ref: "#/components/schemas/Square"
+        promotion:
+          description: Required when the move promotes a pawn; without it the move is
+            rejected as illegal.
+          allOf:
+            - $ref: "#/components/schemas/PromotionPiece"
+      required:
+        - from
+        - to
+    ValidationErrorResponseDto:
+      type: object
+      properties:
+        statusCode:
+          type: number
+          example: 400
+        message:
+          description: One entry per failed constraint.
+          type: array
+          items:
+            type: string
+        error:
+          type: string
+          example: Bad Request
+      required:
+        - statusCode
+        - message
+        - error
+    ErrorResponseDto:
+      type: object
+      properties:
+        statusCode:
+          type: number
+          description: Repeats the HTTP status code.
+        message:
+          type: string
+          description: Human-readable explanation of the failure.
+        error:
+          type: string
+          description: The HTTP status reason phrase.
+      required:
+        - statusCode
+        - message
+        - error
+    LegalMovesDto:
+      type: object
+      properties:
+        square:
+          nullable: true
+          description: The square the moves were filtered to, or null when every legal
+            move is returned.
+          allOf:
+            - $ref: "#/components/schemas/Square"
+        moves:
+          type: array
+          items:
+            $ref: "#/components/schemas/MoveDto"
+      required:
+        - square
+        - moves
+    ResignDto:
+      type: object
+      properties:
+        color:
+          description: The side resigning. The other side wins.
+          allOf:
+            - $ref: "#/components/schemas/PlayerColor"
+      required:
+        - color
