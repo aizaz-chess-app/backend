@@ -47,3 +47,19 @@ jobs:
       - uses: ./.github/actions/setup
 
       - run: pnpm test:e2e
+
+  # The only check the branch rulesets require, so adding or renaming a job above means editing `needs` and nothing else.
+  ci:
+    name: CI
+    needs: [checks, test, e2e]
+    # Without this the job is skipped when a dependency fails, and a skipped required check does not block the merge.
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify every job succeeded
+        run: |
+          echo '${{ toJSON(needs) }}'
+          if echo '${{ toJSON(needs) }}' | jq -e 'any(.[]; .result != "success")' > /dev/null; then
+            echo '::error::One or more jobs did not succeed.'
+            exit 1
+          fi

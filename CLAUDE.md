@@ -197,6 +197,8 @@ or regex** — `@IsIn(SQUARES)`, `@IsIn(Object.values(PromotionPiece))`. Enum-va
 - **Assign every PR to me** (`aizazh1`) on creation — `gh pr create --assignee @me`.
 - **PRs are squash-merged into `dev`.** Keep a branch to one coherent slice, so
   the squashed commit reads as a single meaningful change.
+- **`dev` → `main` release PRs take a merge commit, never a squash.** A squash
+  writes a commit `main` has and `dev` does not, diverging the two permanently.
 - Both branches are protected: CI must pass before a PR can merge.
 - **Do NOT merge automatically.** Opening the PR is where your work stops unless
   I ask otherwise.
