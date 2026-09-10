@@ -29,8 +29,11 @@ describe('GameController (e2e)', () => {
     await app.close();
   });
 
-  const createGame = async (): Promise<string> => {
-    const response = await request(app.getHttpServer()).post('/games').expect(201);
+  const createGame = async (body?: object): Promise<string> => {
+    const response = await request(app.getHttpServer())
+      .post('/games')
+      .send(body ?? {})
+      .expect(201);
     return response.body.id;
   };
 
@@ -149,5 +152,56 @@ describe('GameController (e2e)', () => {
     const response = await request(app.getHttpServer()).post(`/games/${id}/draw`).expect(200);
 
     expect(response.body).toMatchObject({ status: 'draw', result: '1/2-1/2', drawReason: 'agreement' });
+  });
+
+  it('creates an untimed game with no clock', async () => {
+    const response = await request(app.getHttpServer()).post('/games').expect(201);
+
+    expect(response.body).toMatchObject({ timeControl: null, clock: null });
+  });
+
+  it('creates a game with a time control and full clocks', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/games')
+      .send({ timeControl: { initialSeconds: 300, incrementSeconds: 3 } })
+      .expect(201);
+
+    expect(response.body.timeControl).toEqual({ initialSeconds: 300, incrementSeconds: 3 });
+    expect(response.body.clock).toMatchObject({ whiteMs: 300000, blackMs: 300000 });
+    expect(response.body.clock.serverTime).toEqual(expect.any(String));
+  });
+
+  it('400s on a time control outside the allowed range', async () => {
+    await request(app.getHttpServer())
+      .post('/games')
+      .send({ timeControl: { initialSeconds: 0, incrementSeconds: 3 } })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/games')
+      .send({ timeControl: { initialSeconds: 300 } })
+      .expect(400);
+  });
+
+  it('adds the increment to the mover clock', async () => {
+    const id = await createGame({ timeControl: { initialSeconds: 300, incrementSeconds: 5 } });
+
+    const response = await request(app.getHttpServer()).post(`/games/${id}/moves`).send({ from: 'e2', to: 'e4' }).expect(200);
+
+    expect(response.body.clock.whiteMs).toBeGreaterThan(300000);
+    expect(response.body.clock.blackMs).toBe(300000);
+  });
+
+  // The only real wait in the suite: e2e has no route to the store, so the clock has to actually run out.
+  it('ends the game once a clock runs out', async () => {
+    const id = await createGame({ timeControl: { initialSeconds: 1, incrementSeconds: 0 } });
+
+    await new Promise(resolve => setTimeout(resolve, 1100));
+
+    const response = await request(app.getHttpServer()).get(`/games/${id}`).expect(200);
+
+    expect(response.body).toMatchObject({ status: 'timeout', result: '0-1' });
+    expect(response.body.clock.whiteMs).toBe(0);
+
+    await request(app.getHttpServer()).post(`/games/${id}/moves`).send({ from: 'e2', to: 'e4' }).expect(409);
   });
 });
