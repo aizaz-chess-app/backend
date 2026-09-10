@@ -1,6 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { DEFAULT_POSITION, SQUARES, type Square } from 'chess.js';
 import { DrawReason, GameResult, GameStatus, PieceType, PlayerColor, PromotionPiece } from '../game.types.js';
+import { TimeControlDto } from './time-control.dto.js';
+
+export class ClockDto {
+  @ApiProperty({ description: 'Milliseconds left on the White clock, interpolated to serverTime.', example: 284310 })
+  whiteMs!: number;
+
+  @ApiProperty({ description: 'Milliseconds left on the Black clock, interpolated to serverTime.', example: 297000 })
+  blackMs!: number;
+
+  @ApiProperty({ format: 'date-time', description: 'When these values were computed; subtract round-trip latency to sync a local countdown.' })
+  serverTime!: string;
+}
 
 export class MoveDto {
   @ApiProperty({ description: 'Standard algebraic notation.', example: 'e4' })
@@ -76,6 +88,12 @@ export class GameStateDto {
 
   @ApiProperty({ type: [MoveDto], description: 'Every move played, oldest first.' })
   history!: MoveDto[];
+
+  @ApiProperty({ type: TimeControlDto, nullable: true, description: 'Null for an untimed game.' })
+  timeControl!: TimeControlDto | null;
+
+  @ApiProperty({ type: ClockDto, nullable: true, description: 'Null for an untimed game. Frozen at the values the game ended on.' })
+  clock!: ClockDto | null;
 
   @ApiProperty({ format: 'date-time' })
   createdAt!: string;

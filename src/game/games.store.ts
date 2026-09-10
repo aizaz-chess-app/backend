@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Chess } from 'chess.js';
-import { GameRecord } from './game.types.js';
+import { GameClock, GameRecord } from './game.types.js';
 
 export const GAME_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 export const FINISHED_GAME_TTL_MS = 10 * 60 * 1000; // 10m
@@ -12,11 +12,12 @@ export const MAX_GAMES = 5000;
 export class GamesStore {
   private readonly games = new Map<string, GameRecord>();
 
-  create(): GameRecord {
+  // The clock arrives built: the service owns the clock rules, this only holds it.
+  create(clock: GameClock | null = null): GameRecord {
     this.evictStale();
 
     const now = new Date();
-    const record: GameRecord = { id: randomUUID(), chess: new Chess(), outcome: null, finishedAt: null, createdAt: now, updatedAt: now };
+    const record: GameRecord = { id: randomUUID(), chess: new Chess(), outcome: null, clock, finishedAt: null, createdAt: now, updatedAt: now };
 
     this.games.set(record.id, record);
     return record;
