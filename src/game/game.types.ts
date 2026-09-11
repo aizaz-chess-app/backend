@@ -5,7 +5,8 @@ export const GameStatus = {
   CHECKMATE: 'checkmate',
   STALEMATE: 'stalemate',
   DRAW: 'draw',
-  RESIGNED: 'resigned'
+  RESIGNED: 'resigned',
+  TIMEOUT: 'timeout'
 } as const;
 export type GameStatus = (typeof GameStatus)[keyof typeof GameStatus];
 
@@ -47,10 +48,23 @@ export const IN_PROGRESS_OUTCOME: GameOutcome = Object.freeze({
   drawReason: null
 });
 
+export type TimeControl = {
+  initialMs: number;
+  incrementMs: number;
+};
+
+// `remaining` is what each side had banked when the turn last changed hands, so only the side to move is burning time.
+export type GameClock = {
+  timeControl: TimeControl;
+  remaining: Record<PlayerColor, number>;
+  turnStartedAt: number;
+};
+
 export type GameRecord = {
   id: string;
   chess: Chess;
   outcome: GameOutcome | null;
+  clock: GameClock | null;
   finishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;

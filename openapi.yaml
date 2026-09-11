@@ -12,14 +12,27 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponseDto"
+        "400":
+          description: The payload failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponseDto"
       summary: Liveness probe
       tags:
         - health
   /games:
     post:
-      description: Creates a hotseat game at the standard starting position.
+      description: Creates a hotseat game at the standard starting position. Both
+        clocks start immediately when a time control is given.
       operationId: createGame
       parameters: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGameDto"
       responses:
         "201":
           description: ""
@@ -27,8 +40,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GameStateDto"
+        "400": &a1
+          description: The payload failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationErrorResponseDto"
       summary: Start a game
-      tags: &a1
+      tags: &a2
         - games
   /games/{id}:
     get:
@@ -48,6 +67,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GameStateDto"
+        "400": *a1
         "404":
           description: No game found with this id.
           content:
@@ -55,7 +75,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NotFoundErrorResponseDto"
       summary: Read the current game state
-      tags: *a1
+      tags: *a2
   /games/{id}/moves:
     post:
       description: Plays a move for the side to move. There is no player identity, so
@@ -102,7 +122,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponseDto"
       summary: Play a move
-      tags: *a1
+      tags: *a2
     get:
       description: An empty or opponent-occupied square yields an empty list rather
         than an error.
@@ -129,12 +149,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LegalMovesDto"
-        "400":
-          description: The `square` query parameter is not a square.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ValidationErrorResponseDto"
+        "400": *a1
         "404":
           description: No game found with this id.
           content:
@@ -142,7 +157,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/NotFoundErrorResponseDto"
       summary: List legal moves
-      tags: *a1
+      tags: *a2
   /games/{id}/resign:
     post:
       description: Ends the game; the side that did not resign wins.
@@ -168,12 +183,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GameStateDto"
-        "400":
-          description: "`color` is not `w` or `b`."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ValidationErrorResponseDto"
+        "400": *a1
         "404":
           description: No game found with this id.
           content:
@@ -187,7 +197,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponseDto"
       summary: Resign
-      tags: *a1
+      tags: *a2
   /games/{id}/draw:
     post:
       description: Both players are on one client, so this takes no body.
@@ -207,6 +217,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GameStateDto"
+        "400": *a1
         "404":
           description: No game found with this id.
           content:
@@ -220,7 +231,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponseDto"
       summary: Agree a draw
-      tags: *a1
+      tags: *a2
 info:
   title: Chess App API
   description: HTTP API for the chess app backend.
@@ -234,6 +245,24 @@ servers:
     description: Local development
 components:
   schemas:
+    ValidationErrorResponseDto:
+      type: object
+      properties:
+        statusCode:
+          type: number
+          example: 400
+        message:
+          description: One entry per failed constraint.
+          type: array
+          items:
+            type: string
+        error:
+          type: string
+          example: Bad Request
+      required:
+        - statusCode
+        - message
+        - error
     HealthResponseDto:
       type: object
       properties:
@@ -242,6 +271,31 @@ components:
           example: ok
       required:
         - status
+    TimeControlDto:
+      type: object
+      properties:
+        initialSeconds:
+          type: number
+          minimum: 1
+          maximum: 10800
+          example: 300
+          description: Starting time per side, in seconds.
+        incrementSeconds:
+          type: number
+          minimum: 0
+          maximum: 180
+          example: 3
+          description: Seconds added to the mover clock after each move.
+      required:
+        - initialSeconds
+        - incrementSeconds
+    CreateGameDto:
+      type: object
+      properties:
+        timeControl:
+          description: Omit for an untimed game.
+          allOf:
+            - $ref: "#/components/schemas/TimeControlDto"
     PlayerColor:
       type: string
       enum:
@@ -256,6 +310,7 @@ components:
         - stalemate
         - draw
         - resigned
+        - timeout
     GameResult:
       type: string
       enum:
@@ -399,6 +454,26 @@ components:
         - to
         - piece
         - color
+    ClockDto:
+      type: object
+      properties:
+        whiteMs:
+          type: number
+          description: Milliseconds left on the White clock, interpolated to serverTime.
+          example: 284310
+        blackMs:
+          type: number
+          description: Milliseconds left on the Black clock, interpolated to serverTime.
+          example: 297000
+        serverTime:
+          type: string
+          format: date-time
+          description: When these values were computed; subtract round-trip latency to
+            sync a local countdown.
+      required:
+        - whiteMs
+        - blackMs
+        - serverTime
     GameStateDto:
       type: object
       properties:
@@ -443,6 +518,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MoveDto"
+        timeControl:
+          nullable: true
+          description: Null for an untimed game.
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/TimeControlDto"
+        clock:
+          nullable: true
+          description: Null for an untimed game. Frozen at the values the game ended on.
+          type: object
+          allOf:
+            - $ref: "#/components/schemas/ClockDto"
         createdAt:
           type: string
           format: date-time
@@ -460,6 +547,8 @@ components:
         - result
         - drawReason
         - history
+        - timeControl
+        - clock
         - createdAt
         - updatedAt
     NotFoundErrorResponseDto:
@@ -499,24 +588,6 @@ components:
       required:
         - from
         - to
-    ValidationErrorResponseDto:
-      type: object
-      properties:
-        statusCode:
-          type: number
-          example: 400
-        message:
-          description: One entry per failed constraint.
-          type: array
-          items:
-            type: string
-        error:
-          type: string
-          example: Bad Request
-      required:
-        - statusCode
-        - message
-        - error
     ErrorResponseDto:
       type: object
       properties:

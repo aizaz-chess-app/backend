@@ -1,6 +1,7 @@
 import { applyDecorators, Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common';
-import { ApiBadRequestResponse, ApiConflictResponse, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
+import { ApiBadRequestResponse, ApiBody, ApiConflictResponse, ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger';
 import { ErrorResponseDto, NotFoundErrorResponseDto, ValidationErrorResponseDto } from '../common/dto/error-response.dto.js';
+import { CreateGameDto } from './dto/create-game.dto.js';
 import { GameStateDto, LegalMovesDto } from './dto/game-state.dto.js';
 import { LegalMovesQueryDto } from './dto/legal-moves-query.dto.js';
 import { MakeMoveDto } from './dto/make-move.dto.js';
@@ -23,10 +24,11 @@ export class GameController {
   constructor(private readonly gameService: GameService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Start a game', description: 'Creates a hotseat game at the standard starting position.' })
+  @ApiOperation({ summary: 'Start a game', description: 'Creates a hotseat game at the standard starting position. Both clocks start immediately when a time control is given.' })
   @ApiCreatedResponse({ type: GameStateDto })
-  createGame(): GameStateDto {
-    return this.gameService.createGame();
+  @ApiBody({ type: CreateGameDto, required: false })
+  createGame(@Body() dto: CreateGameDto): GameStateDto {
+    return this.gameService.createGame(dto);
   }
 
   @Get(':id')
@@ -61,7 +63,6 @@ export class GameController {
     description: 'An empty or opponent-occupied square yields an empty list rather than an error.'
   })
   @ApiOkResponse({ type: LegalMovesDto })
-  @ApiBadRequestResponse({ type: ValidationErrorResponseDto, description: 'The `square` query parameter is not a square.' })
   getLegalMoves(@Param('id') id: string, @Query() query: LegalMovesQueryDto): LegalMovesDto {
     return this.gameService.getLegalMoves(id, query.square);
   }
@@ -71,7 +72,6 @@ export class GameController {
   @ApiGameId()
   @ApiOperation({ summary: 'Resign', description: 'Ends the game; the side that did not resign wins.' })
   @ApiOkResponse({ type: GameStateDto })
-  @ApiBadRequestResponse({ type: ValidationErrorResponseDto, description: '`color` is not `w` or `b`.' })
   @ApiConflictResponse({ type: ErrorResponseDto, description: GAME_OVER })
   resign(@Param('id') id: string, @Body() dto: ResignDto): GameStateDto {
     return this.gameService.resign(id, dto.color);

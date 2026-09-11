@@ -243,4 +243,100 @@ describe('GameService', () => {
       expect(store.find(id)!.finishedAt).toBe(stampedAt);
     });
   });
+
+  describe('time controls', () => {
+    const BLITZ = { timeControl: { initialSeconds: 300, incrementSeconds: 3 } };
+
+    // Back-dating the turn start is how the store spec simulates elapsed time too — no fake timers.
+    const burnTurn = (id: string, ms: number): void => {
+      const { clock } = store.find(id)!;
+      clock!.turnStartedAt -= ms;
+    };
+
+    it('reports no clock for an untimed game', () => {
+      const game = service.createGame();
+
+      expect(game.clock).toBeNull();
+      expect(game.timeControl).toBeNull();
+    });
+
+    it('starts both clocks full at the configured time', () => {
+      const game = service.createGame(BLITZ);
+
+      expect(game.timeControl).toEqual({ initialSeconds: 300, incrementSeconds: 3 });
+      expect(game.clock!.whiteMs).toBe(300_000);
+      expect(game.clock!.blackMs).toBe(300_000);
+    });
+
+    it('drains only the side to move', () => {
+      const { id } = service.createGame(BLITZ);
+      burnTurn(id, 10_000);
+
+      const game = service.getGame(id);
+
+      expect(game.clock!.whiteMs).toBeLessThanOrEqual(290_000);
+      expect(game.clock!.blackMs).toBe(300_000);
+    });
+
+    it('debits the mover and adds the increment', () => {
+      const { id } = service.createGame(BLITZ);
+      burnTurn(id, 10_000);
+
+      const game = service.makeMove(id, { from: 'e2', to: 'e4' });
+
+      expect(game.clock!.whiteMs).toBeCloseTo(293_000, -2);
+      expect(game.clock!.blackMs).toBe(300_000);
+    });
+
+    it('charges nothing for a rejected move', () => {
+      const { id } = service.createGame(BLITZ);
+      const before = store.find(id)!.clock!.turnStartedAt;
+
+      expect(() => service.makeMove(id, { from: 'e2', to: 'e5' })).toThrow(BadRequestException);
+
+      expect(store.find(id)!.clock!.turnStartedAt).toBe(before);
+      expect(store.find(id)!.clock!.remaining[PlayerColor.WHITE]).toBe(300_000);
+    });
+
+    it('ends the game on a flag, awarding the win to the side with time', () => {
+      const { id } = service.createGame({ timeControl: { initialSeconds: 5, incrementSeconds: 0 } });
+      burnTurn(id, 6_000);
+
+      const game = service.getGame(id);
+
+      expect(game.status).toBe(GameStatus.TIMEOUT);
+      expect(game.result).toBe(GameResult.BLACK_WINS);
+      expect(game.clock!.whiteMs).toBe(0);
+    });
+
+    it('draws on a flag when the opponent cannot mate', () => {
+      const { id } = service.createGame({ timeControl: { initialSeconds: 5, incrementSeconds: 0 } });
+      store.find(id)!.chess.load('4k3/8/8/8/8/8/8/3NK3 b - - 0 1');
+      burnTurn(id, 6_000);
+
+      const game = service.getGame(id);
+
+      expect(game.status).toBe(GameStatus.TIMEOUT);
+      expect(game.result).toBe(GameResult.DRAW);
+      expect(game.drawReason).toBe(DrawReason.INSUFFICIENT_MATERIAL);
+    });
+
+    it('refuses a move once the clock is dead, leaving the board alone', () => {
+      const { id } = service.createGame({ timeControl: { initialSeconds: 5, incrementSeconds: 0 } });
+      burnTurn(id, 6_000);
+
+      expect(() => service.makeMove(id, { from: 'e2', to: 'e4' })).toThrow(ConflictException);
+      expect(service.getGame(id).fen).toBe(DEFAULT_POSITION);
+    });
+
+    it('freezes the clock when the game ends, so it does not drain across reads', () => {
+      const { id } = service.createGame(BLITZ);
+      playFoolsMate(id);
+      const atEnd = service.getGame(id).clock!;
+
+      burnTurn(id, 30_000);
+
+      expect(service.getGame(id).clock).toEqual(expect.objectContaining({ whiteMs: atEnd.whiteMs, blackMs: atEnd.blackMs }));
+    });
+  });
 });

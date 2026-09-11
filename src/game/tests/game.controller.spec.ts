@@ -36,9 +36,11 @@ describe('GameController', () => {
     controller = module.get<GameController>(GameController);
   });
 
-  it('creates a game', () => {
-    expect(controller.createGame()).toBe(state);
-    expect(service.createGame).toHaveBeenCalledOnce();
+  it('passes the create payload straight through', () => {
+    const dto = { timeControl: { initialSeconds: 300, incrementSeconds: 3 } };
+
+    expect(controller.createGame(dto)).toBe(state);
+    expect(service.createGame).toHaveBeenCalledWith(dto);
   });
 
   it('reads a game by id', () => {
